@@ -1,4 +1,6 @@
-# Utility functions
+# ==========================================
+# Utility Functions
+# ==========================================
 
 import pandas as pd
 import numpy as np
@@ -59,6 +61,12 @@ def load_or_download_data() -> Tuple[pd.DataFrame, list]:
     """
     os.makedirs(config.DATA_DIR, exist_ok=True)
     
+    # DEBUG: Print file status
+    logger.info(f"Checking for cached data at: {config.DATA_PATH}")
+    logger.info(f"File exists: {os.path.exists(config.DATA_PATH)}")
+    if os.path.exists(config.DATA_DIR):
+        logger.info(f"Files in data/: {os.listdir(config.DATA_DIR)}")
+    
     if os.path.exists(config.DATA_PATH):
         logger.info(f"Loading cached data from {config.DATA_PATH}")
         try:
@@ -69,8 +77,22 @@ def load_or_download_data() -> Tuple[pd.DataFrame, list]:
             if df.empty or 'clean_text' not in df.columns:
                 raise ValueError("Cached data is invalid")
             
-            category_names = fetch_20newsgroups(subset='all').target_names
-            logger.info(f"Loaded {len(df)} documents")
+            # Get category names from CSV (no download needed!)
+            if 'category' in df.columns:
+                category_names = sorted(df['category'].unique().tolist())
+                logger.info(f"Loaded {len(df)} documents with {len(category_names)} categories")
+            else:
+                # Fallback: Try to get from target column
+                logger.warning("No 'category' column, trying to fetch category names...")
+                try:
+                    category_names = fetch_20newsgroups(subset='all').target_names
+                except Exception as e:
+                    logger.error(f"Failed to fetch category names: {e}")
+                    # Use generic names if both fail
+                    n_cats = df['target'].nunique()
+                    category_names = [f"Category_{i}" for i in range(n_cats)]
+                    logger.info(f"Using generic category names: {category_names}")
+            
             return df, category_names
             
         except Exception as e:
@@ -85,7 +107,25 @@ def load_or_download_data() -> Tuple[pd.DataFrame, list]:
         )
     except Exception as e:
         logger.error(f"Failed to download dataset: {e}")
-        raise
+        logger.warning("Trying alternative download method...")
+        
+        # Fallback: Try with different cache location
+        try:
+            import tempfile
+            cache_dir = tempfile.mkdtemp()
+            newsgroups = fetch_20newsgroups(
+                subset='all',
+                remove=('headers', 'footers', 'quotes'),
+                data_home=cache_dir
+            )
+            logger.info("Alternative download successful!")
+        except Exception as e2:
+            logger.error(f"Alternative download also failed: {e2}")
+            logger.error("Please ensure data/20newsgroups_clean.csv is in your repository!")
+            raise RuntimeError(
+                "Cannot download 20 Newsgroups dataset. "
+                "Please add data/20newsgroups_clean.csv to your repository."
+            )
     
     df = pd.DataFrame({
         'text': newsgroups.data,
@@ -147,7 +187,7 @@ def prepare_data(df: pd.DataFrame) -> Tuple:
     )
     
     X_train = vectorizer.fit_transform(X_text_train)
-    X_test = vectorizer.transform(X_text_test) 
+    X_test = vectorizer.transform(X_text_test)  # Only transform!
     
     logger.info(f"Training set: {X_train.shape[0]} documents")
     logger.info(f"Test set: {X_test.shape[0]} documents")
