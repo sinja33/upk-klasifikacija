@@ -198,7 +198,7 @@ def page_project_overview(data):
         if data['training_summary']:
             best_acc = max([v['test_score'] for v in data['training_summary'].values()])
             st.metric("Najboljša Točnost", f"{best_acc:.1%}")
-            st.caption("Linear SVM (Širši)")
+            st.caption("Naive Bayes (Širši)")
     
     st.markdown("---")
     
